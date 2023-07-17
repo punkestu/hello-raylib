@@ -21,41 +21,58 @@ const (
 const spd = 20
 
 type Chain struct {
-	head rl.Rectangle
-	tail *Chain
-	dir  int
+	head     *Chain
+	body     rl.Rectangle
+	tail     *Chain
+	lastTail *Chain
+	dir      int
 }
 
-func (c *Chain) MoveAndCollapse(dir int, head *rl.Rectangle, clicked bool) bool {
+func NewChain(initX, initY, w, h float32) *Chain {
+	chain := &Chain{
+		head: nil,
+		body: rl.Rectangle{
+			X:      initX,
+			Y:      initY,
+			Width:  w,
+			Height: h,
+		},
+		tail:     nil,
+		lastTail: nil,
+		dir:      UP,
+	}
+	return chain
+}
+
+func (c *Chain) MoveAndCollapse(dir int, clicked bool) bool {
 	if clicked {
 		c.dir = dir
 	}
 	if c.dir == UP {
-		c.head.Y -= spd
+		c.body.Y -= spd
 	}
 	if c.dir == DOWN {
-		c.head.Y += spd
+		c.body.Y += spd
 	}
 	if c.dir == LEFT {
-		c.head.X -= spd
+		c.body.X -= spd
 	}
 	if c.dir == RIGHT {
-		c.head.X += spd
+		c.body.X += spd
 	}
 	var collision bool
-	if &c.head != head {
-		collision = rl.CheckCollisionRecs(c.head, *head)
+	if c.head != nil {
+		collision = rl.CheckCollisionRecs(c.body, c.head.body)
 		if collision {
 			return true
 		}
 	} else {
-		if c.head.X+c.head.Width > WIDTH || c.head.Y+c.head.Height > HEIGHT || c.head.X < 0 || c.head.Y < 0 {
+		if c.body.X+c.body.Width > WIDTH || c.body.Y+c.body.Height > HEIGHT || c.body.X < 0 || c.body.Y < 0 {
 			return true
 		}
-		head = &c.head
 	}
 	if c.tail != nil {
-		collision = c.tail.MoveAndCollapse(c.dir, head, false)
+		collision = c.tail.MoveAndCollapse(c.dir, false)
 		if collision {
 			return true
 		}
@@ -66,11 +83,12 @@ func (c *Chain) MoveAndCollapse(dir int, head *rl.Rectangle, clicked bool) bool 
 	return false
 }
 
-func (c *Chain) AddTail() {
-	if c.tail != nil {
-		c.tail.AddTail()
+func (c *Chain) AddTail() *Chain {
+	if c.lastTail != nil {
+		c.lastTail = c.lastTail.AddTail()
+		return c.lastTail
 	} else {
-		bChain := c.head
+		bChain := c.body
 		switch c.dir {
 		case UP:
 			bChain.Y += 20
@@ -81,21 +99,25 @@ func (c *Chain) AddTail() {
 		case RIGHT:
 			bChain.X -= 20
 		}
-		c.tail = &Chain{
-			head: bChain,
+		tail := &Chain{
+			head: c.head,
+			body: bChain,
 			tail: nil,
 			dir:  c.dir,
 		}
+		c.tail = tail
+		c.lastTail = tail
+		return c.lastTail
 	}
 }
 
 func (c *Chain) IsEatFood(food rl.Rectangle) bool {
-	collision := rl.CheckCollisionRecs(c.head, food)
+	collision := rl.CheckCollisionRecs(c.body, food)
 	return collision
 }
 
 func renderChain(chain *Chain) {
-	rl.DrawRectangleRec(chain.head, rl.Green)
+	rl.DrawRectangleRec(chain.body, rl.Green)
 	if chain.tail != nil {
 		renderChain(chain.tail)
 	}
@@ -124,11 +146,7 @@ func main() {
 		18,
 		18,
 	)
-	player := &Chain{
-		head: chainBlock,
-		tail: nil,
-		dir:  UP,
-	}
+	player := NewChain(chainBlock.X, chainBlock.Y, chainBlock.Width, chainBlock.Height)
 
 	for i := 0; i < 5; i++ {
 		player.AddTail()
@@ -165,7 +183,7 @@ func main() {
 
 		// Updates
 		if time.Since(startTick) > time.Second/level*(level-currLevel) {
-			collision := player.MoveAndCollapse(dir, &player.head, clicked)
+			collision := player.MoveAndCollapse(dir, clicked)
 			if collision {
 				break
 			}
